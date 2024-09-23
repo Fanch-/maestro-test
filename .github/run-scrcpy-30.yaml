@@ -16,34 +16,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-
-      - name: Install srcpy
-        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y scrcpy
-          whereis scrcpy
-
       - name: Set up JDK 17
         uses: actions/setup-java@v3
         with:
           java-version: '17'
           distribution: 'temurin'
-
-#      - name: Cache Maestro
-#        id: maestro-cache
-#        uses: actions/cache@v4
-#        with:
-#          path: ~/.maestro/bin/maestro
-#          key: maestro-${{ runner.os }}-${{ hashFiles('**/maestro') }}
-#          restore-keys: |
-#            maestro-${{ runner.os }}-
-#
-#      - name: Install Maestro
-#        if: steps.maestro-cache.outputs.cache-hit != 'true'
-#        run: |
-#          curl -Ls "https://get.maestro.mobile.dev" | bash
-#          echo "${HOME}/.maestro/bin" >> $GITHUB_PATH
 
       - name: Enable KVM
         run: |
@@ -51,9 +28,9 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Setup Android SDK
-        if: steps.avd-cache.outputs.cache-hit != 'true'
-        uses: android-actions/setup-android@v3
+#      - name: Setup Android SDK
+#        if: steps.avd-cache.outputs.cache-hit != 'true'
+#        uses: android-actions/setup-android@v3
 
       - name: Gradle cache
         uses: gradle/actions/setup-gradle@v3
@@ -65,25 +42,58 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-29-${{ runner.os }}
+          key: avd-30-toto-${{ runner.os }}
 
       - name: create AVD and generate snapshot for caching
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 29
+          cores: 4
+          ram-size: 8192M
+          heap-size: 8192
+          api-level: 30
+          target: google_apis
+          arch: x86_64
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: false
           script: echo "Generated AVD snapshot for caching."
 
+      - name: Cache scrcpy
+        id: scrcpy-cache
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/scrcpy
+          key: scrcpy-${{ runner.os }}-${{ hashFiles('**/scrcpy') }}
+          restore-keys: |
+            scrcpy-${{ runner.os }}-
+
+      - name: Install scrpy
+        if: steps.scrcpy-cache.outputs.cache-hit != 'true'
+        run: |
+          # for Debian/Ubuntu
+          sudo apt install ffmpeg libsdl2-2.0-0 adb wget \
+                gcc git pkg-config meson ninja-build libsdl2-dev \
+                libavcodec-dev libavdevice-dev libavformat-dev libavutil-dev \
+                libswresample-dev libusb-1.0-0 libusb-1.0-0-dev
+          
+          git clone https://github.com/Genymobile/scrcpy
+          cd scrcpy
+          ./install_release.sh
+          
+          whereis scrcpy
+          scrcpy --version
+          
+
       - name: run tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          cores: 8
-          ram-size: 9000M
+          cores: 4
+          ram-size: 8192M
           heap-size: 8192
-          api-level: 29
+          api-level: 30
+          target: google_apis
+          arch: x86
           force-avd-creation: false
           emulator-options: -verbose -memory 16384 -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           profile: pixel_6
@@ -92,25 +102,26 @@ jobs:
             #!/bin/sh
             set +e
             
-            export DISPLAY=:1
-            scrcpy --record output.mp4 &
-            adb shell input keyevent 82 &
+            echo $DISPLAY
+            
+            adb devices
+            
+            scrcpy -s emulator-5554 --no-audio --record=file.mkv
+  
+            adb shell "ls -ld /sdcard"
+            
             sleep 15  # Ajuste la durée de l'enregistrement
-            pkill scrcpy  # Stopper scrcpy après l'enregistrement
-      
+            
+            pkill scrcpy
+            
             echo "ok"
+            
 
 
-
-      - name: Upload Maestro artifacts (report/video)
+      - name: Upload artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: maestro-report
           path: |
-            screenshot.png
-            maestro-report.xml
-            screenrecord.mp4
-            output.mp4
-#            maestro test android-lbc-ad-insertion.yaml --format junit --output maestro-report.xml
-#             adb shell monkey -p fr.leboncoin.delivery -c android.intent.category.LAUNCHER 1
+            output.mkv
