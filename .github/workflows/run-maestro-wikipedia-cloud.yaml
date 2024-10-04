@@ -1,0 +1,36 @@
+---
+name: Run Maestro with cloud
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+
+jobs:
+  run-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+#      - name: Cache Maestro
+#        id: maestro-cache
+#        uses: actions/cache@v4
+#        with:
+#          path: ~/.maestro/bin/maestro
+#          key: maestro-${{ runner.os }}-toto-${{ hashFiles('**/maestro') }}
+
+      - name: Install Maestro
+        run: |
+          uname -a
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "${HOME}/.maestro/bin" >> $GITHUB_PATH
+
+      - uses: mobile-dev-inc/action-maestro-cloud@v1.1.0
+        with:
+          api-key: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
+          app-file: wikipedia.apk
